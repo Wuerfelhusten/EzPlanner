@@ -23,7 +23,9 @@ $keystore = Join-Path $root $props["storeFile"]
 if (-not (Test-Path $keystore)) { throw "Keystore not found: $keystore" }
 
 function Set-Secret([string]$Name, [string]$Value) {
-    $Value | gh secret set $Name --repo $Repo
+    # --body instead of a pipe: Windows PowerShell 5.1 appends CR/LF to piped input, which
+    # corrupts the base64 keystore and the passwords.
+    gh secret set $Name --repo $Repo --body $Value
     if ($LASTEXITCODE -ne 0) { throw "gh secret set $Name failed" }
 }
 
