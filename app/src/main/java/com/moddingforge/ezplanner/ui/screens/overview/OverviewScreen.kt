@@ -53,6 +53,9 @@ import com.moddingforge.ezplanner.ui.monthName
 import com.moddingforge.ezplanner.ui.screens.booking.SetBalanceDialog
 import com.moddingforge.ezplanner.ui.subtitle
 import com.moddingforge.ezplanner.ui.theme.Ez
+import com.moddingforge.ezplanner.domain.Ledger
+import com.moddingforge.ezplanner.domain.Schedule
+import java.time.LocalDate
 import java.time.YearMonth
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -66,7 +69,13 @@ fun OverviewScreen(nav: NavController) {
     val types by repo.expenseTypes.collectAsStateWithLifecycle(emptyList())
     val settings by repo.settings.collectAsStateWithLifecycle(Settings())
 
+    val orders by repo.standingOrders.collectAsStateWithLifecycle(emptyList())
     val month = YearMonth.now()
+    // Expected balance at the end of the month: future-dated bookings + standing orders not yet booked.
+    val projected = remember(transactions, orders, month) {
+        val end = month.atEndOfMonth()
+        Ledger.accountBalance(transactions + Schedule.planned(orders, LocalDate.now(), end), end)
+    }
     val summary = remember(transactions, types, month) {
         MonthSummaryCalculator.calculate(month, transactions, types, emptyList())
     }
@@ -111,10 +120,31 @@ fun OverviewScreen(nav: NavController) {
                         style = MaterialTheme.typography.displaySmall,
                         color = if (balance < 0) Ez.money.expense else MaterialTheme.colorScheme.onSurface,
                     )
+                    if (projected != balance) {
+                        Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "Ende ${month.monthName()} voraussichtlich",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                Money.format(projected),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = if (projected < 0) Ez.money.expense else MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                        Text(
+                            "inkl. geplanter Buchungen und Daueraufträge bis zum Monatsende",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     Text(
                         "Tippen, um den Kontostand zu korrigieren",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
                     )
                 }
             }

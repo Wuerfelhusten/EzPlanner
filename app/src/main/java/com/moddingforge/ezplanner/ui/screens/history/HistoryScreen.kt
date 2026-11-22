@@ -223,7 +223,7 @@ private fun HistoryItem(
         TxKind.INCOME -> listOf(if (tx.incomeType == com.moddingforge.ezplanner.data.db.IncomeType.OTHER) "Sonstiges Einkommen" else "Einkommen")
         TxKind.TO_POT, TxKind.FROM_POT, TxKind.POT_ADJUSTMENT -> listOfNotNull(pot?.name, tx.kind.label())
         TxKind.ADJUSTMENT -> listOf(tx.kind.label())
-    }.joinToString(" · ")
+    }.joinToString(" · ") + if (tx.date.isAfter(java.time.LocalDate.now())) " · geplant" else ""
     val (amountText, color) = when (tx.kind) {
         TxKind.POT_ADJUSTMENT -> Money.formatSigned(tx.amountCents) to Ez.money.transfer
         TxKind.ADJUSTMENT -> Money.formatSigned(delta) to Ez.money.adjustment

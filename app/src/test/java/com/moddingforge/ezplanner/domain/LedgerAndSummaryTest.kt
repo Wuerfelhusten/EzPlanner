@@ -33,7 +33,20 @@ class LedgerAndSummaryTest {
             tx(TxKind.ADJUSTMENT, -500),
             tx(TxKind.POT_ADJUSTMENT, 425000, pot = 1),
         )
-        assertEquals(200000 - 50000 - 10000 + 2000 - 500, Ledger.accountBalance(all))
+        assertEquals(200000 - 50000 - 10000 + 2000 - 500, Ledger.accountBalance(all, day))
+    }
+
+    @Test
+    fun `future bookings do not count yet`() {
+        val all = listOf(
+            tx(TxKind.INCOME, 200000),
+            tx(TxKind.EXPENSE, 50000, DefaultData.TYPE_BUDGET, date = day.plusMonths(1)), // entered for next month
+            tx(TxKind.TO_POT, 10000, pot = 1, date = day.plusDays(1)),
+        )
+        assertEquals(200000L, Ledger.accountBalance(all, day))
+        assertEquals(0L, Ledger.potBalances(all, listOf(savings), day)[1])
+        assertEquals(200000L - 50000 - 10000, Ledger.accountBalance(all, day.plusMonths(1)))
+        assertEquals(10000L, Ledger.potBalances(all, listOf(savings), day.plusDays(1))[1])
     }
 
     @Test
@@ -48,7 +61,7 @@ class LedgerAndSummaryTest {
             tx(TxKind.FROM_POT, 10000, pot = 3),
             tx(TxKind.TO_POT, 4000, pot = 3),
         )
-        val b = Ledger.potBalances(all, listOf(savings, lent, borrowed))
+        val b = Ledger.potBalances(all, listOf(savings, lent, borrowed), day)
         assertEquals(515000L, b[1])
         assertEquals(3000L, b[2])
         assertEquals(6000L, b[3])

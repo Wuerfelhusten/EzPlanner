@@ -65,7 +65,8 @@ fun PotDetailScreen(nav: NavController, id: Long) {
         Scaffold(topBar = { BackTopBar("Topf", { nav.popBackStack() }) }) { Column(Modifier.padding(it)) {} }
         return
     }
-    val balance = history.sumOf { Ledger.potDelta(it, p) }
+    val today = java.time.LocalDate.now()
+    val balance = history.filter { !it.date.isAfter(today) }.sumOf { Ledger.potDelta(it, p) }
 
     Scaffold(
         topBar = {
@@ -171,7 +172,9 @@ fun PotDetailScreen(nav: NavController, id: Long) {
                             Column(Modifier.weight(1f)) {
                                 Text(tx.title, style = MaterialTheme.typography.bodyLarge)
                                 Text(
-                                    tx.date.formatDate() + if (tx.kind == TxKind.POT_ADJUSTMENT) " · ohne Konto" else "",
+                                    tx.date.formatDate() +
+                                        (if (tx.kind == TxKind.POT_ADJUSTMENT) " · ohne Konto" else "") +
+                                        (if (tx.date.isAfter(today)) " · geplant" else ""),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )

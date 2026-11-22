@@ -4,6 +4,7 @@ import com.moddingforge.ezplanner.data.db.DebtDirection
 import com.moddingforge.ezplanner.data.db.PotEntity
 import com.moddingforge.ezplanner.data.db.TransactionEntity
 import com.moddingforge.ezplanner.data.db.TxKind
+import java.time.LocalDate
 
 /**
  * Balances are never stored; they are always the sum of all bookings. That keeps everything
@@ -36,12 +37,18 @@ object Ledger {
         }
     }
 
-    fun accountBalance(all: List<TransactionEntity>): Long = all.sumOf(::accountDelta)
+    /**
+     * Balance on [asOf] (end of that day). Bookings dated later are planned and do not count yet,
+     * e.g. an expense entered today for the 1st of next month.
+     */
+    fun accountBalance(all: List<TransactionEntity>, asOf: LocalDate): Long =
+        all.filter { !it.date.isAfter(asOf) }.sumOf(::accountDelta)
 
-    fun potBalances(all: List<TransactionEntity>, pots: List<PotEntity>): Map<Long, Long> {
+    fun potBalances(all: List<TransactionEntity>, pots: List<PotEntity>, asOf: LocalDate): Map<Long, Long> {
         val byId = pots.associateBy { it.id }
         val result = pots.associate { it.id to 0L }.toMutableMap()
         for (tx in all) {
+            if (tx.date.isAfter(asOf)) continue
             val pot = tx.potId?.let(byId::get) ?: continue
             result[pot.id] = result.getValue(pot.id) + potDelta(tx, pot)
         }

@@ -37,10 +37,11 @@ class EzRepository(
     val categories: Flow<List<CategoryEntity>> = categoryDao.observeAll()
     val settings: Flow<Settings> = settingsStore.settings
 
-    val accountBalance: Flow<Long> = transactions.map(Ledger::accountBalance)
+    /** Balance today; future-dated bookings are not included yet. Re-evaluated on every collection. */
+    val accountBalance: Flow<Long> = transactions.map { Ledger.accountBalance(it, LocalDate.now()) }
 
     val potBalances: Flow<Map<Long, Long>> =
-        combine(transactions, pots) { all, pots -> Ledger.potBalances(all, pots) }
+        combine(transactions, pots) { all, pots -> Ledger.potBalances(all, pots, LocalDate.now()) }
 
     fun observePot(id: Long): Flow<PotEntity?> = potDao.observe(id)
     fun observePotTransactions(potId: Long): Flow<List<TransactionEntity>> = txDao.observeForPot(potId)
@@ -62,7 +63,8 @@ class EzRepository(
 
     /** "Kontostand setzen": books the difference as an adjustment dated [date]. */
     suspend fun setAccountBalance(targetCents: Long, date: LocalDate) {
-        val current = Ledger.accountBalance(txDao.getAll())
+        // Balance on the chosen day, so later (planned) bookings stay untouched by the correction.
+        val current = Ledger.accountBalance(txDao.getAll(), date)
         val diff = targetCents - current
         if (diff == 0L) return
         txDao.insert(

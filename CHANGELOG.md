@@ -9,6 +9,8 @@ The section becomes the GitHub release text and is shown in the app after the up
 - Wird nur das Datum eines Dauerauftrags verschoben, wird derselbe Monat nicht mehr ein zweites Mal gebucht
 - Daueraufträge direkt in Spartöpfe: Art „Sparen“ im Dauerauftrag, und im Topf gibt es „Dauerauftrag einrichten“ samt Liste der Daueraufträge dieses Topfs
 - Ein neu angelegter Spartopf wird im Formular automatisch ausgewählt
+- Behoben: Buchungen mit Datum in der Zukunft wurden sofort vom Kontostand abgezogen – sie zählen jetzt erst ab ihrem Datum und sind im Verlauf als „geplant“ markiert
+- Übersicht zeigt zusätzlich den voraussichtlichen Kontostand am Monatsende (inkl. geplanter Buchungen und Daueraufträge)
 
 ## 2.1.0
 

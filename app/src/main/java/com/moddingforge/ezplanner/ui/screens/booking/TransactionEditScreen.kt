@@ -196,6 +196,13 @@ fun TransactionEditScreen(nav: NavController, id: Long, initialKind: TxKind, ini
                 modifier = Modifier.fillMaxWidth(),
             )
             DateField(form.date, { form.date = it }, "Datum")
+            if (form.date.isAfter(LocalDate.now())) {
+                Text(
+                    "Geplant: zählt erst ab dem ${form.date.formatDate()} zum Kontostand.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             OutlinedTextField(
                 value = form.note,
                 onValueChange = { form.note = it },
