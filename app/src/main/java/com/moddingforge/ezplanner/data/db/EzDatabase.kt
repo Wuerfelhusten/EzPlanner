@@ -5,6 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
@@ -15,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ExpenseTypeEntity::class,
         CategoryEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -30,7 +31,20 @@ abstract class EzDatabase : RoomDatabase() {
         fun create(context: Context): EzDatabase =
             Room.databaseBuilder(context, EzDatabase::class.java, "ezplanner.db")
                 .addCallback(SeedCallback)
+                .addMigrations(Migration1To2)
                 .build()
+    }
+}
+
+/** 2.3.0: built-in expense type "Investieren" (ETF, shares) for existing installs. */
+private object Migration1To2 : Migration(1, 2) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "INSERT INTO expense_types (name, countsTowardBudget, sortOrder, builtin) " +
+                "SELECT 'Investieren', 0, 3, 1 WHERE NOT EXISTS (SELECT 1 FROM expense_types WHERE name = 'Investieren')",
+        )
+        // A custom type the user may already have called "Investieren" becomes the built-in one.
+        db.execSQL("UPDATE expense_types SET builtin = 1 WHERE name = 'Investieren'")
     }
 }
 
@@ -56,11 +70,14 @@ object DefaultData {
     const val TYPE_FIXED = 1L
     const val TYPE_BUDGET = 2L
     const val TYPE_SPECIAL = 3L
+    /** Fixed id on fresh installs only; upgraded installs get it by migration (see [Migration1To2]). */
+    const val TYPE_INVEST = 4L
 
     val expenseTypes = listOf(
         ExpenseTypeEntity(TYPE_FIXED, "Fixkosten", countsTowardBudget = false, sortOrder = 0, builtin = true),
         ExpenseTypeEntity(TYPE_BUDGET, "Budget", countsTowardBudget = true, sortOrder = 1, builtin = true),
         ExpenseTypeEntity(TYPE_SPECIAL, "Sonderausgaben", countsTowardBudget = false, sortOrder = 2, builtin = true),
+        ExpenseTypeEntity(TYPE_INVEST, "Investieren", countsTowardBudget = false, sortOrder = 3, builtin = true),
     )
 
     val categories = listOf(

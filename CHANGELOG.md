@@ -3,6 +3,12 @@
 Every release needs a section `## <version>` here (the release workflow fails without one).
 The section becomes the GitHub release text and is shown in the app after the update.
 
+## 2.3.0
+
+- Neuer Ausgabentyp „Investieren“ neben Sonderausgaben – Geld für ETF oder Aktien wird in Auswertung, Geldfluss und Aufträgen gesondert aufgelistet und zählt nicht zum Monatsbudget
+- Aufträge: Ausgaben sind nach Ausgabentyp gegliedert (Fixkosten, Budget, Sonderausgaben, Investieren …), jeweils mit Summe pro Monat
+- Aufträge: neuer Bereich „Geplante Einzelbuchungen“ – einmalige Buchungen mit Datum in der Zukunft (z. B. Sonderausgaben) anzeigen, antippen und bearbeiten, oder direkt neu planen
+
 ## 2.2.0
 
 - Dauerauftrag bearbeiten: neue Option „Diese Buchung auch anpassen“ – korrigiert die letzte bereits gebuchte Buchung mit (z. B. falsch eingetragenes Gehalt); bei geändertem Datum wird sie zum neuen Termin neu gebucht

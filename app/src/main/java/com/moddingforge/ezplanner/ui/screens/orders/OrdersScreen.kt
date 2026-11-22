@@ -12,11 +12,13 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -33,28 +35,26 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.moddingforge.ezplanner.data.db.Interval
 import com.moddingforge.ezplanner.data.db.StandingOrderEntity
+import com.moddingforge.ezplanner.data.db.TransactionEntity
 import com.moddingforge.ezplanner.data.db.TxKind
+import com.moddingforge.ezplanner.domain.Ledger
 import com.moddingforge.ezplanner.domain.Money
 import com.moddingforge.ezplanner.domain.Schedule
 import com.moddingforge.ezplanner.ui.LocalRepository
 import com.moddingforge.ezplanner.ui.Routes
 import com.moddingforge.ezplanner.ui.components.AmountRow
 import com.moddingforge.ezplanner.ui.components.EmptyHint
+import com.moddingforge.ezplanner.ui.components.HSpace
 import com.moddingforge.ezplanner.ui.components.SectionCard
 import com.moddingforge.ezplanner.ui.formatDate
 import com.moddingforge.ezplanner.ui.label
 import com.moddingforge.ezplanner.ui.theme.Ez
+import java.time.LocalDate
 
 private enum class Sort(val label: String) { AMOUNT("Betrag"), NAME("Name"), DUE("Fälligkeit") }
 
-private enum class Group(val title: String) { INCOME("Einkommen"), EXPENSE("Ausgaben"), SAVING("Sparen & Töpfe"), STOPPED("Pausiert / beendet") }
-
-private fun StandingOrderEntity.group(): Group = when {
-    Schedule.nextDueDate(this) == null -> Group.STOPPED
-    kind == TxKind.INCOME -> Group.INCOME
-    kind == TxKind.EXPENSE -> Group.EXPENSE
-    else -> Group.SAVING
-}
+/** One block of the list: income, one per expense type, saving, stopped. */
+private data class Section(val key: String, val title: String, val orders: List<StandingOrderEntity>, val showPerMonth: Boolean = true)
 
 /** Monthly equivalent: a yearly 120 € order counts as 10 € per month. */
 private fun List<StandingOrderEntity>.perMonth(): Long = sumOf { it.amountCents / it.interval.months }
@@ -64,25 +64,44 @@ private fun List<StandingOrderEntity>.perMonth(): Long = sumOf { it.amountCents 
 fun OrdersScreen(nav: NavController) {
     val repo = LocalRepository.current
     val orders by repo.standingOrders.collectAsStateWithLifecycle(emptyList())
+    val transactions by repo.transactions.collectAsStateWithLifecycle(emptyList())
     val pots by repo.pots.collectAsStateWithLifecycle(emptyList())
     val types by repo.expenseTypes.collectAsStateWithLifecycle(emptyList())
+    val categories by repo.categories.collectAsStateWithLifecycle(emptyList())
     var sort by rememberSaveable { mutableStateOf(Sort.AMOUNT) }
+    val today = LocalDate.now()
 
     val comparator: Comparator<StandingOrderEntity> = when (sort) {
         Sort.AMOUNT -> compareByDescending<StandingOrderEntity> { it.amountCents }.thenBy { it.title.lowercase() }
         Sort.NAME -> compareBy { it.title.lowercase() }
         Sort.DUE -> compareBy<StandingOrderEntity> { Schedule.nextDueDate(it) }.thenBy { it.title.lowercase() }
     }
-    val byGroup = orders.groupBy { it.group() }
 
-    val income = byGroup[Group.INCOME].orEmpty().perMonth()
-    val expenses = byGroup[Group.EXPENSE].orEmpty().perMonth()
-    val saving = byGroup[Group.SAVING].orEmpty().filter { it.kind == TxKind.TO_POT }.perMonth() -
-        byGroup[Group.SAVING].orEmpty().filter { it.kind == TxKind.FROM_POT }.perMonth()
+    val running = orders.filter { Schedule.nextDueDate(it) != null }
+    val stopped = orders.filter { Schedule.nextDueDate(it) == null }
+    val expenses = running.filter { it.kind == TxKind.EXPENSE }
+    val typeIds = types.map { it.id }.toSet()
+    val sections = buildList {
+        add(Section("income", "Einkommen", running.filter { it.kind == TxKind.INCOME }))
+        // Every expense type gets its own block: Fixkosten, Budget, Sonderausgaben, Investieren, own types.
+        types.forEach { t -> add(Section("type-${t.id}", t.name, expenses.filter { it.expenseTypeId == t.id })) }
+        add(Section("type-none", "Ausgaben ohne Typ", expenses.filter { it.expenseTypeId !in typeIds }))
+        add(Section("saving", "Sparen & Töpfe", running.filter { it.kind == TxKind.TO_POT || it.kind == TxKind.FROM_POT }))
+        add(Section("stopped", "Pausiert / beendet", stopped, showPerMonth = false))
+    }.filter { it.orders.isNotEmpty() }
+
+    // One-time bookings with a future date (e.g. workshop next month) - planned, not yet in the balance.
+    val plannedOnce = transactions
+        .filter { it.standingOrderId == null && it.dueDate == null && it.date.isAfter(today) }
+        .sortedBy { it.date }
+
+    val income = running.filter { it.kind == TxKind.INCOME }.perMonth()
+    val saving = running.filter { it.kind == TxKind.TO_POT }.perMonth() - running.filter { it.kind == TxKind.FROM_POT }.perMonth()
+    val expenseTotal = expenses.perMonth()
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
-        topBar = { TopAppBar(title = { Text("Daueraufträge") }) },
+        topBar = { TopAppBar(title = { Text("Aufträge") }) },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { nav.navigate(Routes.newOrder()) },
@@ -96,15 +115,20 @@ fun OrdersScreen(nav: NavController) {
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            if (orders.isEmpty()) {
+            if (orders.isEmpty() && plannedOnce.isEmpty()) {
                 item { EmptyHint("Noch keine Daueraufträge. Lege z. B. Gehalt, Miete und Versicherungen an.") }
-            } else {
+            }
+            if (orders.isNotEmpty()) {
                 item {
-                    SectionCard(title = "Pro Monat umgerechnet") {
+                    SectionCard(title = "Daueraufträge pro Monat umgerechnet") {
                         AmountRow("Einkommen", income, color = Ez.money.income)
-                        AmountRow("Ausgaben", -expenses, signed = true, color = Ez.money.expense)
+                        AmountRow("Ausgaben", -expenseTotal, signed = true, color = Ez.money.expense)
+                        types.forEach { t ->
+                            val v = expenses.filter { it.expenseTypeId == t.id }.perMonth()
+                            if (v > 0) AmountRow("Davon ${t.name}", -v, signed = true, indent = true)
+                        }
                         AmountRow("Sparen", -saving, signed = true, color = Ez.money.transfer)
-                        AmountRow("Bleibt", income - expenses - saving, emphasized = true, signed = true)
+                        AmountRow("Bleibt", income - expenseTotal - saving, emphasized = true, signed = true)
                     }
                 }
                 item {
@@ -119,26 +143,24 @@ fun OrdersScreen(nav: NavController) {
                 }
             }
 
-            Group.entries.forEach { group ->
-                val list = byGroup[group].orEmpty()
-                if (list.isEmpty()) return@forEach
-                item(key = "g-$group") {
+            sections.forEach { section ->
+                item(key = "g-${section.key}") {
                     Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.Bottom) {
-                        Text(group.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                        if (group != Group.STOPPED) {
+                        Text(section.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                        if (section.showPerMonth) {
                             Text(
-                                "${Money.format(list.perMonth())} / Monat",
+                                "${Money.format(section.orders.perMonth())} / Monat",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
                 }
-                // Within a group: one block per interval (monthly first), each sorted.
+                // Within a section: one block per interval (monthly first), each sorted.
                 Interval.entries.forEach { interval ->
-                    val inInterval = list.filter { it.interval == interval }.sortedWith(comparator)
+                    val inInterval = section.orders.filter { it.interval == interval }.sortedWith(comparator)
                     if (inInterval.isEmpty()) return@forEach
-                    item(key = "i-$group-$interval") {
+                    item(key = "i-${section.key}-$interval") {
                         Row(Modifier.fillMaxWidth().padding(top = 4.dp, start = 4.dp, end = 4.dp)) {
                             Text(
                                 interval.label(),
@@ -157,13 +179,54 @@ fun OrdersScreen(nav: NavController) {
                         OrderItem(
                             order,
                             subtitleExtra = when (order.kind) {
-                                TxKind.EXPENSE -> types.firstOrNull { it.id == order.expenseTypeId }?.name
+                                TxKind.EXPENSE -> categories.firstOrNull { it.id == order.categoryId }?.name
                                 TxKind.TO_POT, TxKind.FROM_POT -> pots.firstOrNull { it.id == order.potId }?.name
                                 else -> null
                             },
                             onClick = { nav.navigate(Routes.editOrder(order.id)) },
                         )
                     }
+                }
+            }
+
+            item(key = "planned-header") {
+                Row(Modifier.fillMaxWidth().padding(top = 16.dp), verticalAlignment = Alignment.Bottom) {
+                    Text("Geplante Einzelbuchungen", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    if (plannedOnce.isNotEmpty()) {
+                        Text(
+                            Money.formatSigned(plannedOnce.sumOf { Ledger.accountDelta(it) }),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            if (plannedOnce.isEmpty()) {
+                item(key = "planned-empty") {
+                    Text(
+                        "Einmalige Buchungen mit einem Datum in der Zukunft erscheinen hier, z. B. eine Sonderausgabe für die Werkstatt im nächsten Monat.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp),
+                    )
+                }
+            }
+            items(plannedOnce, key = { "p${it.id}" }) { tx ->
+                PlannedItem(
+                    tx,
+                    subtitle = listOfNotNull(
+                        types.firstOrNull { it.id == tx.expenseTypeId }?.name,
+                        categories.firstOrNull { it.id == tx.categoryId }?.name,
+                        pots.firstOrNull { it.id == tx.potId }?.name,
+                    ).joinToString(" · "),
+                    onClick = { nav.navigate(Routes.editTransaction(tx.id)) },
+                )
+            }
+            item(key = "planned-add") {
+                OutlinedButton(onClick = { nav.navigate(Routes.newTransaction(TxKind.EXPENSE)) }, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.Event, null)
+                    HSpace(8)
+                    Text("Einmalige Buchung planen")
                 }
             }
         }
@@ -209,6 +272,29 @@ private fun OrderItem(order: StandingOrderEntity, subtitleExtra: String?, onClic
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun PlannedItem(tx: TransactionEntity, subtitle: String, onClick: () -> Unit) {
+    val delta = Ledger.accountDelta(tx)
+    val color = when (tx.kind) {
+        TxKind.TO_POT, TxKind.FROM_POT, TxKind.POT_ADJUSTMENT -> Ez.money.transfer
+        TxKind.ADJUSTMENT -> Ez.money.adjustment
+        else -> if (delta >= 0) Ez.money.income else Ez.money.expense
+    }
+    SectionCard(onClick = onClick) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(tx.title, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    listOf(tx.date.formatDate(), subtitle).filter { it.isNotBlank() }.joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(Money.formatSigned(if (tx.kind == TxKind.POT_ADJUSTMENT) tx.amountCents else delta), style = MaterialTheme.typography.titleMedium, color = color)
         }
     }
 }
