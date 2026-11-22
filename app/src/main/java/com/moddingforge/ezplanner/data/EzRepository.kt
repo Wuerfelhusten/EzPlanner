@@ -11,6 +11,7 @@ import com.moddingforge.ezplanner.data.db.TransactionEntity
 import com.moddingforge.ezplanner.data.db.TxKind
 import com.moddingforge.ezplanner.domain.Ledger
 import com.moddingforge.ezplanner.domain.Schedule
+import com.moddingforge.ezplanner.domain.toTransaction
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -124,19 +125,6 @@ class EzRepository(
             booked
         }
     }
-
-    private fun StandingOrderEntity.toTransaction(date: LocalDate) = TransactionEntity(
-        date = date,
-        amountCents = amountCents,
-        kind = kind,
-        title = title,
-        expenseTypeId = if (kind == TxKind.EXPENSE) expenseTypeId else null,
-        categoryId = if (kind == TxKind.EXPENSE) categoryId else null,
-        incomeType = if (kind == TxKind.INCOME) incomeType else null,
-        potId = if (kind == TxKind.TO_POT || kind == TxKind.FROM_POT) potId else null,
-        standingOrderId = id,
-        dueDate = date,
-    )
 
     // --- Pots --------------------------------------------------------------------------------
 

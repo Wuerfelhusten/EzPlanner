@@ -81,7 +81,7 @@ fun BookScreen(nav: NavController) {
                 "Gehalt, Erstattung, Geschenk …",
             ) { nav.navigate(Routes.newTransaction(TxKind.INCOME)) }
             ActionCard(
-                Icons.Default.Savings, Ez.money.transfer, "Topf-Buchung",
+                Icons.Default.Savings, Ez.money.transfer, "Sparen & Töpfe",
                 "Sparen, entnehmen, Geld verliehen oder zurückgezahlt",
             ) { nav.navigate(Routes.newTransaction(TxKind.TO_POT)) }
             ActionCard(

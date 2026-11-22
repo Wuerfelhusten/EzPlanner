@@ -1,6 +1,8 @@
 package com.moddingforge.ezplanner.domain
 
 import com.moddingforge.ezplanner.data.db.StandingOrderEntity
+import com.moddingforge.ezplanner.data.db.TransactionEntity
+import com.moddingforge.ezplanner.data.db.TxKind
 import java.time.LocalDate
 
 /**
@@ -39,6 +41,29 @@ object Schedule {
     }
 
     /**
+     * Occurrences that are not booked yet with a due date in [from]..[to], as bookings with
+     * id [PLANNED_ID]. Lets the analytics show the whole month (e.g. salary at the end of the
+     * month) before the due day has come. Already booked occurrences are never included, because
+     * counting starts at [StandingOrderEntity.nextIndex].
+     */
+    fun planned(orders: List<StandingOrderEntity>, from: LocalDate, to: LocalDate): List<TransactionEntity> {
+        val result = mutableListOf<TransactionEntity>()
+        for (order in orders) {
+            if (!order.active) continue
+            var i = order.nextIndex
+            while (true) {
+                val due = dueDate(order, i)
+                if (due.isAfter(to) || (order.endDate != null && due.isAfter(order.endDate))) break
+                if (!due.isBefore(from)) result += order.toTransaction(due).copy(id = PLANNED_ID)
+                i++
+            }
+        }
+        return result
+    }
+
+    const val PLANNED_ID = -1L
+
+    /**
      * Index to continue with after the order was edited: the first occurrence strictly after
      * [lastBooked] (the last due date already booked), or 0 if nothing was booked yet.
      */
@@ -49,3 +74,17 @@ object Schedule {
         return i
     }
 }
+
+/** The booking a standing order creates on [date]. */
+fun StandingOrderEntity.toTransaction(date: LocalDate) = TransactionEntity(
+    date = date,
+    amountCents = amountCents,
+    kind = kind,
+    title = title,
+    expenseTypeId = if (kind == TxKind.EXPENSE) expenseTypeId else null,
+    categoryId = if (kind == TxKind.EXPENSE) categoryId else null,
+    incomeType = if (kind == TxKind.INCOME) incomeType else null,
+    potId = if (kind == TxKind.TO_POT || kind == TxKind.FROM_POT) potId else null,
+    standingOrderId = id,
+    dueDate = date,
+)

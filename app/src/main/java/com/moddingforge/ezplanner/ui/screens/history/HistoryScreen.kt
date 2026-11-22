@@ -69,7 +69,7 @@ private enum class Filter(val label: String, val matches: (TransactionEntity) ->
     ALL("Alle", { true }),
     INCOME("Einkommen", { it.kind == TxKind.INCOME }),
     EXPENSE("Ausgaben", { it.kind == TxKind.EXPENSE }),
-    POTS("Töpfe", { it.kind == TxKind.TO_POT || it.kind == TxKind.FROM_POT || it.kind == TxKind.POT_ADJUSTMENT }),
+    POTS("Sparen & Töpfe", { it.kind == TxKind.TO_POT || it.kind == TxKind.FROM_POT || it.kind == TxKind.POT_ADJUSTMENT }),
     ADJUST("Anpassungen", { it.kind == TxKind.ADJUSTMENT }),
 }
 

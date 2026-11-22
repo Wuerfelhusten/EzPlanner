@@ -191,19 +191,24 @@ fun MoneyField(
 @Composable
 fun DateField(date: LocalDate, onChange: (LocalDate) -> Unit, label: String, modifier: Modifier = Modifier) {
     var open by remember { mutableStateOf(false) }
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    LaunchedEffect(pressed) { if (pressed) open = true }
-    OutlinedTextField(
-        value = date.formatDate(),
-        onValueChange = {},
-        readOnly = true,
-        label = { Text(label) },
-        trailingIcon = { Icon(Icons.Default.CalendarMonth, contentDescription = "Datum wählen") },
-        interactionSource = interaction,
-        singleLine = true,
-        modifier = modifier.fillMaxWidth(),
-    )
+    // A read-only text field does not report taps reliably, so a transparent layer on top opens the picker.
+    Box(modifier.fillMaxWidth()) {
+        OutlinedTextField(
+            value = date.formatDate(),
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = { Icon(Icons.Default.CalendarMonth, contentDescription = "Datum wählen") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Box(
+            Modifier
+                .matchParentSize()
+                .padding(top = 8.dp)
+                .clickable { open = true },
+        )
+    }
     if (open) {
         val state = rememberDatePickerState(
             initialSelectedDateMillis = date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),

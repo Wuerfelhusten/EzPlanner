@@ -70,7 +70,10 @@ class LedgerAndSummaryTest {
         assertEquals(224728L, s.incomeRegular)
         assertEquals(5000L, s.incomeOther)
         assertEquals(90000L, s.toPots)
-        assertEquals(101399L + 33523 + 40000 + 90000, s.expensesTotal)
+        // Saving is its own area: not part of the expenses.
+        assertEquals(101399L + 33523 + 40000, s.expensesTotal)
+        assertEquals(90000L, s.savedNet)
+        assertEquals(224728L + 5000 - (101399 + 33523 + 40000) - 90000, s.net)
 
         val budget = BudgetState(61484, s.budgetUsed, 80)
         assertEquals(27961L, budget.available)

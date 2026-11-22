@@ -44,18 +44,15 @@ import com.moddingforge.ezplanner.data.db.TxKind
 import com.moddingforge.ezplanner.domain.BudgetState
 import com.moddingforge.ezplanner.domain.Money
 import com.moddingforge.ezplanner.domain.MonthSummaryCalculator
-import com.moddingforge.ezplanner.domain.Schedule
 import com.moddingforge.ezplanner.ui.LocalRepository
 import com.moddingforge.ezplanner.ui.Routes
 import com.moddingforge.ezplanner.ui.components.AmountRow
 import com.moddingforge.ezplanner.ui.components.BudgetBar
 import com.moddingforge.ezplanner.ui.components.SectionCard
-import com.moddingforge.ezplanner.ui.formatDate
 import com.moddingforge.ezplanner.ui.monthName
 import com.moddingforge.ezplanner.ui.screens.booking.SetBalanceDialog
 import com.moddingforge.ezplanner.ui.subtitle
 import com.moddingforge.ezplanner.ui.theme.Ez
-import java.time.LocalDate
 import java.time.YearMonth
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -66,7 +63,6 @@ fun OverviewScreen(nav: NavController) {
     val transactions by repo.transactions.collectAsStateWithLifecycle(emptyList())
     val pots by repo.pots.collectAsStateWithLifecycle(emptyList())
     val potBalances by repo.potBalances.collectAsStateWithLifecycle(emptyMap())
-    val orders by repo.standingOrders.collectAsStateWithLifecycle(emptyList())
     val types by repo.expenseTypes.collectAsStateWithLifecycle(emptyList())
     val settings by repo.settings.collectAsStateWithLifecycle(Settings())
 
@@ -82,12 +78,6 @@ fun OverviewScreen(nav: NavController) {
     val savings = activePots.filter { it.kind == PotKind.SAVINGS }
     val debts = activePots.filter { it.kind == PotKind.DEBT }
     val archived = pots.filter { it.archived }
-    val today = LocalDate.now()
-    val upcoming = orders
-        .mapNotNull { o -> Schedule.nextDueDate(o)?.let { o to it } }
-        .filter { (_, d) -> !d.isAfter(today.plusDays(14)) }
-        .sortedBy { it.second }
-        .take(5)
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
@@ -152,36 +142,6 @@ fun OverviewScreen(nav: NavController) {
                     onAdd = { nav.navigate(Routes.newPot(PotKind.DEBT)) },
                     onOpen = { nav.navigate(Routes.pot(it.id)) },
                 )
-            }
-
-            if (upcoming.isNotEmpty()) {
-                item {
-                    SectionCard(title = "Demnächst fällig") {
-                        upcoming.forEach { (order, date) ->
-                            val positive = order.kind == TxKind.INCOME || order.kind == TxKind.FROM_POT
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clickable { nav.navigate(Routes.editOrder(order.id)) }
-                                    .padding(vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(order.title, style = MaterialTheme.typography.bodyLarge)
-                                    Text(
-                                        if (date == today) "heute" else date.formatDate(),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                Text(
-                                    Money.formatSigned(if (positive) order.amountCents else -order.amountCents),
-                                    color = if (positive) Ez.money.income else Ez.money.expense,
-                                )
-                            }
-                        }
-                    }
-                }
             }
 
             if (archived.isNotEmpty()) {
