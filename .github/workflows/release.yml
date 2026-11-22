@@ -1,0 +1,125 @@
+# Release: push a tag v<MAJOR.MINOR.PATCH> that matches ezplanner.versionName in gradle.properties.
+# Runs the tests, builds the signed release APK and publishes it as a GitHub release, where the
+# in-app updater picks it up.
+#
+# Required repository secrets (see tools/release/set-github-secrets.ps1):
+#   EZPLANNER_KEYSTORE_BASE64    release keystore (.jks), base64 encoded
+#   EZPLANNER_KEYSTORE_PASSWORD  keystore password
+#   EZPLANNER_KEY_ALIAS          key alias
+#   EZPLANNER_KEY_PASSWORD       key password
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # SHA-256 of the release signing certificate. Installed apps only accept updates signed with
+  # this certificate, so a build signed with anything else must never be published.
+  RELEASE_CERT_SHA256: 8c4cb5f8e2b0b020b1c37378d77c6b467130d711d9a099bf1308d40e5680e1b0
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check tag matches the app version
+        id: version
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="$(grep -E '^ezplanner\.versionName=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')"
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag '$TAG' is not of the form vMAJOR.MINOR.PATCH"; exit 1
+          fi
+          if [ "$TAG" != "v$VERSION" ]; then
+            echo "::error::Tag '$TAG' does not match ezplanner.versionName '$VERSION' in gradle.properties"; exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing EzPlanner $VERSION"
+
+      - name: Release notes from CHANGELOG.md
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          # The section "## <version>" up to the next "## " heading.
+          awk -v v="$VERSION" '
+            /^## / { if (found) exit; split($2, a, " "); h = a[1]; sub(/^v/, "", h); if (h == v) { found = 1; next } }
+            found { print }
+          ' CHANGELOG.md | sed -e '/./,$!d' > "$RUNNER_TEMP/notes.md"
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/notes.md"; then
+            echo "::error::CHANGELOG.md has no entry for $VERSION - add a section '## $VERSION' before releasing"; exit 1
+          fi
+          cat "$RUNNER_TEMP/notes.md"
+
+      - name: Check signing secrets
+        env:
+          KS: ${{ secrets.EZPLANNER_KEYSTORE_BASE64 }}
+          KSP: ${{ secrets.EZPLANNER_KEYSTORE_PASSWORD }}
+          KA: ${{ secrets.EZPLANNER_KEY_ALIAS }}
+          KP: ${{ secrets.EZPLANNER_KEY_PASSWORD }}
+        run: |
+          for v in KS KSP KA KP; do
+            if [ -z "${!v}" ]; then echo "::error::Signing secrets are missing (see tools/release/set-github-secrets.ps1)"; exit 1; fi
+          done
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Android SDK location
+        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest
+
+      - name: Build signed release APK
+        env:
+          KEYSTORE_BASE64: ${{ secrets.EZPLANNER_KEYSTORE_BASE64 }}
+          EZPLANNER_KEYSTORE_PASSWORD: ${{ secrets.EZPLANNER_KEYSTORE_PASSWORD }}
+          EZPLANNER_KEY_ALIAS: ${{ secrets.EZPLANNER_KEY_ALIAS }}
+          EZPLANNER_KEY_PASSWORD: ${{ secrets.EZPLANNER_KEY_PASSWORD }}
+        run: |
+          export EZPLANNER_KEYSTORE_FILE="$RUNNER_TEMP/release.jks"
+          echo "$KEYSTORE_BASE64" | base64 -d > "$EZPLANNER_KEYSTORE_FILE"
+          ./gradlew assembleRelease -Pezplanner.requireReleaseKey=true
+          rm -f "$EZPLANNER_KEYSTORE_FILE"
+
+      - name: Verify APK (signature, version, package)
+        id: apk
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          APK="app/build/outputs/apk/release/app-release.apk"
+          OUT="EzPlanner-$VERSION.apk"
+          CERT="$("$BT/apksigner" verify --print-certs "$APK" | grep -m1 'certificate SHA-256 digest' | awk '{print $NF}')"
+          if [ "$CERT" != "$RELEASE_CERT_SHA256" ]; then
+            echo "::error::APK is signed with $CERT, expected $RELEASE_CERT_SHA256 - installed apps could not update"; exit 1
+          fi
+          BADGING="$("$BT/aapt2" dump badging "$APK")"
+          NAME="$(echo "$BADGING" | grep -oP "versionName='\K[^']+")"
+          PKG="$(echo "$BADGING" | grep -oP "package: name='\K[^']+")"
+          if [ "$NAME" != "$VERSION" ]; then echo "::error::APK versionName '$NAME' differs from the tag"; exit 1; fi
+          if [ "$PKG" != "com.moddingforge.ezplanner" ]; then echo "::error::APK has package '$PKG', expected 'com.moddingforge.ezplanner'"; exit 1; fi
+          cp "$APK" "$OUT"
+          sha256sum "$OUT" > "$OUT.sha256"
+          echo "apk=$OUT" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: EzPlanner ${{ steps.version.outputs.version }}
+          body_path: ${{ runner.temp }}/notes.md
+          files: |
+            ${{ steps.apk.outputs.apk }}
+            ${{ steps.apk.outputs.apk }}.sha256
