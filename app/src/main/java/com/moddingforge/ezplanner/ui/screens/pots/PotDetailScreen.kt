@@ -45,6 +45,8 @@ import com.moddingforge.ezplanner.ui.components.ConfirmDialog
 import com.moddingforge.ezplanner.ui.components.EmptyHint
 import com.moddingforge.ezplanner.ui.components.SectionCard
 import com.moddingforge.ezplanner.ui.formatDate
+import com.moddingforge.ezplanner.ui.label
+import com.moddingforge.ezplanner.domain.Schedule
 import com.moddingforge.ezplanner.ui.screens.overview.PotRow
 import com.moddingforge.ezplanner.ui.theme.Ez
 import kotlinx.coroutines.launch
@@ -54,6 +56,8 @@ fun PotDetailScreen(nav: NavController, id: Long) {
     val repo = LocalRepository.current
     val pot by repo.observePot(id).collectAsStateWithLifecycle(null)
     val history by repo.observePotTransactions(id).collectAsStateWithLifecycle(emptyList())
+    val allOrders by repo.standingOrders.collectAsStateWithLifecycle(emptyList())
+    val potOrders = allOrders.filter { it.potId == id }
     val scope = rememberCoroutineScope()
     var confirmDelete by remember { mutableStateOf(false) }
 
@@ -115,6 +119,40 @@ fun PotDetailScreen(nav: NavController, id: Long) {
                         onClick = { nav.navigate(Routes.newTransaction(TxKind.POT_ADJUSTMENT, p.id)) },
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("${p.actionLabel(TxKind.POT_ADJUSTMENT)} (ohne Konto)") }
+                    FilledTonalButton(
+                        onClick = { nav.navigate(Routes.newOrder(p.id)) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Dauerauftrag einrichten (z. B. monatlich sparen)") }
+                }
+            }
+            if (potOrders.isNotEmpty()) {
+                item {
+                    SectionCard(title = "Daueraufträge") {
+                        potOrders.forEachIndexed { i, o ->
+                            if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { nav.navigate(Routes.editOrder(o.id)) }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(o.title, style = MaterialTheme.typography.bodyLarge)
+                                    Text(
+                                        listOfNotNull(
+                                            o.interval.label(),
+                                            p.actionLabel(o.kind),
+                                            Schedule.nextDueDate(o)?.let { "nächste: ${it.formatDate()}" } ?: "pausiert/beendet",
+                                        ).joinToString(" · "),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Text(Money.format(o.amountCents), color = Ez.money.transfer)
+                            }
+                        }
+                    }
                 }
             }
             item {

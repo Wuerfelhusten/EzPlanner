@@ -74,21 +74,39 @@ class EzRepository(
 
     suspend fun getStandingOrder(id: Long): StandingOrderEntity? = orderDao.get(id)
 
+    suspend fun lastBookingOfOrder(orderId: Long): TransactionEntity? = txDao.lastBookingOfOrder(orderId)
+
     /**
-     * Saves an order. When the schedule of an existing order changed, it continues after the
-     * last date already booked, so nothing is booked twice and nothing is skipped.
+     * Saves an order.
+     *
+     * [adjustLastBooking] = false: changes apply to future dates only. If the schedule changed,
+     * the order continues after the last booked date (never twice in the same month).
+     *
+     * [adjustLastBooking] = true: the most recent booking of this order is corrected as well -
+     * amount, title and kind are taken over; if the schedule changed, that booking is removed and
+     * the occurrence is booked again on its new date (immediately if that date has passed,
+     * otherwise on the day). This is how a wrongly entered salary is fixed.
      */
-    suspend fun saveStandingOrder(order: StandingOrderEntity) {
+    suspend fun saveStandingOrder(order: StandingOrderEntity, adjustLastBooking: Boolean = false) {
         db.withTransaction {
             val toSave = if (order.id == 0L) {
                 order.copy(nextIndex = 0)
             } else {
                 val old = orderDao.get(order.id)
                 val scheduleChanged = old == null || old.startDate != order.startDate || old.interval != order.interval
-                if (scheduleChanged) {
-                    order.copy(nextIndex = Schedule.indexAfter(order, txDao.lastDueDate(order.id)))
-                } else {
-                    order.copy(nextIndex = old.nextIndex)
+                val last = if (adjustLastBooking) txDao.lastBookingOfOrder(order.id) else null
+                when {
+                    last != null && scheduleChanged -> {
+                        txDao.delete(last)
+                        order.copy(nextIndex = Schedule.indexAfter(order, txDao.lastDueDate(order.id)))
+                    }
+                    last != null -> {
+                        val date = last.dueDate ?: last.date
+                        txDao.update(order.toTransaction(date).copy(id = last.id, date = last.date, note = last.note))
+                        order.copy(nextIndex = old!!.nextIndex)
+                    }
+                    scheduleChanged -> order.copy(nextIndex = Schedule.indexAfter(order, txDao.lastDueDate(order.id)))
+                    else -> order.copy(nextIndex = old!!.nextIndex)
                 }
             }
             orderDao.upsert(toSave)

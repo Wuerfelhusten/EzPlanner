@@ -3,6 +3,13 @@
 Every release needs a section `## <version>` here (the release workflow fails without one).
 The section becomes the GitHub release text and is shown in the app after the update.
 
+## 2.2.0
+
+- Dauerauftrag bearbeiten: neue Option „Diese Buchung auch anpassen“ – korrigiert die letzte bereits gebuchte Buchung mit (z. B. falsch eingetragenes Gehalt); bei geändertem Datum wird sie zum neuen Termin neu gebucht
+- Wird nur das Datum eines Dauerauftrags verschoben, wird derselbe Monat nicht mehr ein zweites Mal gebucht
+- Daueraufträge direkt in Spartöpfe: Art „Sparen“ im Dauerauftrag, und im Topf gibt es „Dauerauftrag einrichten“ samt Liste der Daueraufträge dieses Topfs
+- Ein neu angelegter Spartopf wird im Formular automatisch ausgewählt
+
 ## 2.1.0
 
 - Neues Sankey-Diagramm „Geldfluss“ in den Auswertungen: Einkommen → Ausgabentypen, Sparen und Übrig, wahlweise für Monat oder Jahr und aufgeschlüsselt nach Kategorien; lässt sich als Bild teilen

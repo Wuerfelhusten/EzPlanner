@@ -59,7 +59,7 @@ private enum class Tab(val route: String, val label: String, val icon: ImageVect
 object Routes {
     fun newTransaction(kind: TxKind, potId: Long? = null) = "tx?kind=${kind.name}&potId=${potId ?: 0}"
     fun editTransaction(id: Long) = "tx?id=$id"
-    fun newOrder() = "order"
+    fun newOrder(potId: Long? = null) = if (potId != null) "order?potId=$potId" else "order"
     fun editOrder(id: Long) = "order?id=$id"
     fun pot(id: Long) = "pot/$id"
     fun newPot(kind: PotKind) = "potEdit?kind=${kind.name}"
@@ -124,9 +124,15 @@ fun EzApp() {
                 )
             }
             composable(
-                "order?id={id}",
-                arguments = listOf(navArgument("id") { type = NavType.LongType; defaultValue = 0L }),
-            ) { entry -> OrderEditScreen(nav, entry.arguments!!.getLong("id")) }
+                "order?id={id}&potId={potId}",
+                arguments = listOf(
+                    navArgument("id") { type = NavType.LongType; defaultValue = 0L },
+                    navArgument("potId") { type = NavType.LongType; defaultValue = 0L },
+                ),
+            ) { entry ->
+                val args = entry.arguments!!
+                OrderEditScreen(nav, args.getLong("id"), args.getLong("potId").takeIf { it != 0L })
+            }
             composable(
                 "pot/{id}",
                 arguments = listOf(navArgument("id") { type = NavType.LongType }),

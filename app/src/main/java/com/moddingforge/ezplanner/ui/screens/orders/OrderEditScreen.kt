@@ -42,6 +42,8 @@ import com.moddingforge.ezplanner.data.db.DefaultData
 import com.moddingforge.ezplanner.data.db.Interval
 import com.moddingforge.ezplanner.data.db.PotKind
 import com.moddingforge.ezplanner.data.db.StandingOrderEntity
+import com.moddingforge.ezplanner.data.db.TransactionEntity
+import java.time.YearMonth
 import com.moddingforge.ezplanner.data.db.TxKind
 import com.moddingforge.ezplanner.domain.Money
 import com.moddingforge.ezplanner.domain.Schedule
@@ -75,12 +77,16 @@ class OrderForm : ViewModel() {
     var endDate by mutableStateOf(LocalDate.now().plusYears(1))
     var note by mutableStateOf("")
     var showErrors by mutableStateOf(false)
+    /** Most recent booking of this order (editing only). */
+    var lastBooking by mutableStateOf<TransactionEntity?>(null)
+    /** Apply the changes to [lastBooking] as well. */
+    var adjustLast by mutableStateOf(false)
 }
 
 @Composable
-fun OrderEditScreen(nav: NavController, id: Long) {
+fun OrderEditScreen(nav: NavController, id: Long, initialPotId: Long? = null) {
     val repo = LocalRepository.current
-    val form: OrderForm = viewModel(key = "order-$id")
+    val form: OrderForm = viewModel(key = "order-$id-$initialPotId")
     val scope = rememberCoroutineScope()
     val types by repo.expenseTypes.collectAsStateWithLifecycle(emptyList())
     val categories by repo.categories.collectAsStateWithLifecycle(emptyList())
@@ -88,8 +94,13 @@ fun OrderEditScreen(nav: NavController, id: Long) {
     var confirmDelete by remember { mutableStateOf(false) }
 
     LaunchedEffect(id) {
-        if (form.loaded || id == 0L) return@LaunchedEffect
+        if (form.loaded) return@LaunchedEffect
         form.loaded = true
+        if (id == 0L) {
+            // Opened from a pot: pay into that pot.
+            if (initialPotId != null) form.cls = Classification(group = KindGroup.POT, potId = initialPotId, potAction = TxKind.TO_POT)
+            return@LaunchedEffect
+        }
         val o = repo.getStandingOrder(id)
         if (o == null) {
             nav.popBackStack()
@@ -104,6 +115,10 @@ fun OrderEditScreen(nav: NavController, id: Long) {
         form.hasEnd = o.endDate != null
         o.endDate?.let { form.endDate = it }
         form.note = o.note
+        val last = repo.lastBookingOfOrder(o.id)
+        form.lastBooking = last
+        // Preselected when the last booking is from this month - the usual "I entered it wrong" case.
+        form.adjustLast = last != null && YearMonth.from(last.date) == YearMonth.now()
     }
 
     val existing = form.existing
@@ -139,7 +154,7 @@ fun OrderEditScreen(nav: NavController, id: Long) {
             return
         }
         scope.launch {
-            repo.saveStandingOrder(draft)
+            repo.saveStandingOrder(draft, adjustLastBooking = form.adjustLast && form.lastBooking != null)
             nav.popBackStack()
         }
     }
@@ -219,6 +234,31 @@ fun OrderEditScreen(nav: NavController, id: Long) {
             )
 
             SchedulePreview(draft, isNew = existing == null, today = today, potLabel = selectedPot.actionLabel(draft.kind))
+
+            val last = form.lastBooking
+            if (existing != null && last != null) {
+                val scheduleChanged = existing.startDate != form.startDate || existing.interval != form.interval
+                SectionCard(title = "Bereits gebucht") {
+                    Text(
+                        "Letzte Buchung: ${last.date.formatDate()} · ${Money.format(last.amountCents)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Diese Buchung auch anpassen", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                        Switch(checked = form.adjustLast, onCheckedChange = { form.adjustLast = it })
+                    }
+                    Text(
+                        when {
+                            !form.adjustLast -> "Änderungen gelten nur für künftige Termine."
+                            scheduleChanged -> "Die Buchung vom ${last.date.formatDate()} wird entfernt und zum neuen Termin " +
+                                "gebucht – sofort, wenn er schon erreicht ist."
+                            else -> "Betrag, Titel und Art werden auch in dieser Buchung geändert."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
 
             Button(
                 onClick = ::save,

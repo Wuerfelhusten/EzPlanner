@@ -69,6 +69,16 @@ class ScheduleTest {
     }
 
     @Test
+    fun `moving the salary day does not book the same month twice`() {
+        // Booked on 22.11., then moved to the 28th: next is December, not 28.11.
+        val moved = order(d("2026-11-28"))
+        assertEquals(d("2026-12-28"), Schedule.dueDate(moved, Schedule.indexAfter(moved, d("2026-11-22"))))
+        // Moved to an earlier day: also continues next month.
+        val earlier = order(d("2026-11-15"))
+        assertEquals(d("2026-12-15"), Schedule.dueDate(earlier, Schedule.indexAfter(earlier, d("2026-11-22"))))
+    }
+
+    @Test
     fun `index after last booked date`() {
         val o = order(d("2026-01-10"))
         assertEquals(0, Schedule.indexAfter(o, null))

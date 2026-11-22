@@ -10,6 +10,8 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import com.moddingforge.ezplanner.data.db.PotKind
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -27,7 +29,7 @@ import com.moddingforge.ezplanner.ui.subtitle
 enum class KindGroup(val label: String) {
     EXPENSE("Ausgabe"),
     INCOME("Einkommen"),
-    POT("Topf"),
+    POT("Sparen"),
 }
 
 /** What a booking or standing order is: kind plus the details that belong to that kind. */
@@ -86,6 +88,13 @@ fun ClassificationFields(
     onCreatePot: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Pots: preselect one (savings first), also right after a new pot was created from here.
+    LaunchedEffect(value.group, pots) {
+        if (value.group == KindGroup.POT && pots.none { it.id == value.potId } && pots.isNotEmpty()) {
+            val pick = pots.firstOrNull { it.kind == PotKind.SAVINGS } ?: pots.first()
+            onChange(value.copy(potId = pick.id))
+        }
+    }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             KindGroup.entries.forEachIndexed { i, g ->
@@ -136,11 +145,11 @@ fun ClassificationFields(
             KindGroup.POT -> {
                 if (pots.isEmpty()) {
                     Text(
-                        "Noch kein Spar- oder Schuldentopf vorhanden.",
+                        "Noch kein Spartopf vorhanden – lege einen an (z. B. Notgroschen), danach geht es hier weiter.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    TextButton(onClick = onCreatePot) { Text("Topf anlegen") }
+                    TextButton(onClick = onCreatePot) { Text("Spartopf anlegen") }
                 } else {
                     ChoiceChips(
                         title = "Topf",

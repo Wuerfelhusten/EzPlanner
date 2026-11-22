@@ -27,6 +27,9 @@ interface TransactionDao {
     @Query("SELECT MAX(dueDate) FROM transactions WHERE standingOrderId = :orderId")
     suspend fun lastDueDate(orderId: Long): LocalDate?
 
+    @Query("SELECT * FROM transactions WHERE standingOrderId = :orderId ORDER BY dueDate DESC, id DESC LIMIT 1")
+    suspend fun lastBookingOfOrder(orderId: Long): TransactionEntity?
+
     @Insert
     suspend fun insert(tx: TransactionEntity): Long
 

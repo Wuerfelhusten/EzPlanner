@@ -4,6 +4,7 @@ import com.moddingforge.ezplanner.data.db.StandingOrderEntity
 import com.moddingforge.ezplanner.data.db.TransactionEntity
 import com.moddingforge.ezplanner.data.db.TxKind
 import java.time.LocalDate
+import java.time.YearMonth
 
 /**
  * Due dates of standing orders. Bookings are day-based: an occurrence is due for the whole
@@ -64,14 +65,20 @@ object Schedule {
     const val PLANNED_ID = -1L
 
     /**
-     * Index to continue with after the order was edited: the first occurrence strictly after
-     * [lastBooked] (the last due date already booked), or 0 if nothing was booked yet.
+     * Index to continue with after the schedule was edited: the first occurrence after
+     * [lastBooked] (the last due date already booked) that is not in the same calendar month,
+     * or 0 if nothing was booked yet. Moving a salary from the 22nd to the 28th therefore does
+     * not book November a second time.
      */
     fun indexAfter(order: StandingOrderEntity, lastBooked: LocalDate?): Int {
         if (lastBooked == null) return 0
+        val bookedMonth = YearMonth.from(lastBooked)
         var i = 0
-        while (!dueDate(order, i).isAfter(lastBooked)) i++
-        return i
+        while (true) {
+            val due = dueDate(order, i)
+            if (due.isAfter(lastBooked) && YearMonth.from(due) != bookedMonth) return i
+            i++
+        }
     }
 }
 
