@@ -44,6 +44,15 @@ object Ledger {
     fun accountBalance(all: List<TransactionEntity>, asOf: LocalDate): Long =
         all.filter { !it.date.isAfter(asOf) }.sumOf(::accountDelta)
 
+    /** Correction that brings [pot] to [targetCents] on [date] without touching the account; null if it already matches. */
+    fun potCorrection(all: List<TransactionEntity>, pot: PotEntity, targetCents: Long, date: LocalDate): TransactionEntity? {
+        val diff = targetCents - potBalances(all, listOf(pot), date).getValue(pot.id)
+        if (diff == 0L) return null
+        return TransactionEntity(
+            date = date, amountCents = diff, kind = TxKind.POT_ADJUSTMENT, title = "Stand angepasst", potId = pot.id,
+        )
+    }
+
     fun potBalances(all: List<TransactionEntity>, pots: List<PotEntity>, asOf: LocalDate): Map<Long, Long> {
         val byId = pots.associateBy { it.id }
         val result = pots.associate { it.id to 0L }.toMutableMap()

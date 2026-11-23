@@ -49,6 +49,8 @@ class PotForm : ViewModel() {
     var direction by mutableStateOf(DebtDirection.OWES_ME)
     var target by mutableStateOf("")
     var initial by mutableStateOf("")
+    /** Balance when the pot was opened for editing. */
+    var loadedBalance by mutableStateOf<Long?>(null)
     var note by mutableStateOf("")
     var showErrors by mutableStateOf(false)
 }
@@ -65,6 +67,9 @@ fun PotEditScreen(nav: NavController, id: Long, initialKind: PotKind) {
         form.kind = initialKind
         if (id != 0L) {
             val p = repo.getPot(id) ?: return@LaunchedEffect
+            val balance = repo.getPotBalance(p)
+            form.loadedBalance = balance
+            form.initial = Money.toInput(balance).ifEmpty { "0,00" }
             form.existing = p
             form.name = p.name
             form.kind = p.kind
@@ -95,8 +100,14 @@ fun PotEditScreen(nav: NavController, id: Long, initialKind: PotKind) {
             note = form.note.trim(),
         )
         scope.launch {
+            if (existing != null) {
+                // Only correct the balance when the user changed it.
+                repo.savePotWithBalance(pot, initial.takeIf { form.initial.isNotBlank() && it != form.loadedBalance })
+                nav.popBackStack()
+                return@launch
+            }
             val potId = repo.savePot(pot)
-            if (existing == null && initial != 0L) {
+            if (initial != 0L) {
                 // Starting amount: pot only, the account is not touched.
                 repo.saveTransaction(
                     TransactionEntity(
@@ -172,7 +183,20 @@ fun PotEditScreen(nav: NavController, id: Long, initialKind: PotKind) {
             if (!isDebt) {
                 MoneyField(form.target, { form.target = it }, "Sparziel (optional)")
             }
-            if (existing == null) {
+            if (existing != null) {
+                val diff = (Money.parse(form.initial) ?: form.loadedBalance ?: 0L) - (form.loadedBalance ?: 0L)
+                MoneyField(
+                    form.initial,
+                    { form.initial = it },
+                    if (isDebt) "Aktuell offener Betrag" else "Aktueller Stand",
+                    allowNegative = true,
+                    supportingText = if (diff == 0L) {
+                        "Ändert nur den Topf – kein Einkommen, keine Ausgabe, Konto bleibt gleich."
+                    } else {
+                        "Korrektur nur im Topf: ${Money.formatSigned(diff)}"
+                    },
+                )
+            } else {
                 MoneyField(
                     form.initial,
                     { form.initial = it },

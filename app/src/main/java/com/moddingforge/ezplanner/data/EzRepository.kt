@@ -151,6 +151,19 @@ class EzRepository(
     suspend fun getPot(id: Long): PotEntity? = potDao.get(id)
     suspend fun savePot(pot: PotEntity): Long = potDao.upsert(pot).let { if (it == -1L) pot.id else it }
 
+    suspend fun getPotBalance(pot: PotEntity): Long =
+        Ledger.potBalances(txDao.getAll(), listOf(pot), LocalDate.now()).getValue(pot.id)
+
+    /** Saves [pot] and, if [targetCents] is given, corrects its balance (pot only, no account booking). */
+    suspend fun savePotWithBalance(pot: PotEntity, targetCents: Long?) {
+        db.withTransaction {
+            val saved = pot.copy(id = savePot(pot))
+            if (targetCents != null) {
+                Ledger.potCorrection(txDao.getAll(), saved, targetCents, LocalDate.now())?.let { txDao.insert(it) }
+            }
+        }
+    }
+
     /** Deletes the pot together with all its bookings and standing orders. */
     suspend fun deletePot(pot: PotEntity) = potDao.delete(pot)
 

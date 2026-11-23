@@ -96,6 +96,23 @@ class LedgerAndSummaryTest {
     }
 
     @Test
+    fun `setting a pot balance changes only the pot`() {
+        for (pot in listOf(savings, lent, borrowed)) {
+            val all = listOf(tx(TxKind.INCOME, 100000), tx(TxKind.POT_ADJUSTMENT, 425000, pot = pot.id))
+            for (target in listOf(500000L, 100000L, 0L)) {
+                val after = all + Ledger.potCorrection(all, pot, target, day)!!
+                assertEquals(target, Ledger.potBalances(after, listOf(pot), day)[pot.id])
+                assertEquals(100000L, Ledger.accountBalance(after, day))
+                val s = MonthSummaryCalculator.summarize(after, DefaultData.expenseTypes, DefaultData.categories)
+                assertEquals(100000L, s.incomeTotal)
+                assertEquals(0L, s.expensesTotal)
+                assertEquals(0L, s.savedNet)
+            }
+            assertEquals(null, Ledger.potCorrection(all, pot, 425000, day))
+        }
+    }
+
+    @Test
     fun `money parse and format`() {
         assertEquals(123456L, Money.parse("1.234,56"))
         assertEquals(1250L, Money.parse("12,5"))

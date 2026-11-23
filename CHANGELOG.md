@@ -3,6 +3,10 @@
 Every release needs a section `## <version>` here (the release workflow fails without one).
 The section becomes the GitHub release text and is shown in the app after the update.
 
+## 2.4.0
+
+- Topf bearbeiten: Der aktuelle Stand lässt sich direkt ändern – nur der Topf wird angepasst, ohne Einzahlung, Entnahme, Einkommen oder Ausgabe
+
 ## 2.3.0
 
 - Neuer Ausgabentyp „Investieren“ neben Sonderausgaben – Geld für ETF oder Aktien wird in Auswertung, Geldfluss und Aufträgen gesondert aufgelistet und zählt nicht zum Monatsbudget
