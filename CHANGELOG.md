@@ -3,6 +3,11 @@
 Every release needs a section `## <version>` here (the release workflow fails without one).
 The section becomes the GitHub release text and is shown in the app after the update.
 
+## 2.4.1
+
+- Geldfluss: Ein- und Auszahlungen desselben Topfs werden im gewählten Zeitraum verrechnet – Geld, das nur durch einen Topf läuft, zählt nicht mehr mehrfach
+- Geldfluss: Der mittlere Balken heißt jetzt „Gesamt“, Beschriftungen am rechten Rand werden nicht mehr abgeschnitten
+
 ## 2.4.0
 
 - Topf bearbeiten: Der aktuelle Stand lässt sich direkt ändern – nur der Topf wird angepasst, ohne Einzahlung, Entnahme, Einkommen oder Ausgabe

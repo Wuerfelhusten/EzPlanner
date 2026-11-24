@@ -36,6 +36,42 @@ class PlannedAndSankeyTest {
     }
 
     @Test
+    fun `money passing through a pot is counted once`() {
+        fun tx(kind: TxKind, cents: Long, type: Long? = null, pot: Long? = null) = TransactionEntity(
+            date = d("2026-11-10"), amountCents = cents, kind = kind, title = "t", expenseTypeId = type, potId = pot,
+            incomeType = if (kind == TxKind.INCOME) IncomeType.OTHER else null,
+        )
+        // Other income -> pot -> back to the account -> invested (amounts from a real month).
+        val list = listOf(
+            tx(TxKind.INCOME, 425486),
+            tx(TxKind.TO_POT, 689904, pot = 1),
+            tx(TxKind.FROM_POT, 398338, pot = 1),
+            tx(TxKind.EXPENSE, 398338, DefaultData.TYPE_INVEST),
+            tx(TxKind.EXPENSE, 899, DefaultData.TYPE_BUDGET),
+        )
+        val data = SankeyBuilder.build(list, DefaultData.expenseTypes, emptyList(), false)
+        assertTrue(data.nodes.none { it.key == "in:pots" })
+        assertEquals(291566L, data.value("saving"))
+        assertEquals(265317L, data.value("in:deficit"))
+        assertEquals(690803L, data.value("total"))
+
+        // Complete round trip: the pot does not show up at all.
+        val round = SankeyBuilder.build(
+            listOf(tx(TxKind.INCOME, 1000), tx(TxKind.TO_POT, 1000, pot = 1), tx(TxKind.FROM_POT, 1000, pot = 1), tx(TxKind.EXPENSE, 1000, DefaultData.TYPE_INVEST)),
+            DefaultData.expenseTypes, emptyList(), false,
+        )
+        assertEquals(1000L, round.value("total"))
+        assertTrue(round.nodes.none { it.key == "in:pots" || it.key == "saving" })
+
+        // From one pot into another: stays visible on both sides.
+        val between = SankeyBuilder.build(
+            listOf(tx(TxKind.FROM_POT, 500, pot = 1), tx(TxKind.TO_POT, 500, pot = 2)), DefaultData.expenseTypes, emptyList(), false,
+        )
+        assertEquals(500L, between.value("in:pots"))
+        assertEquals(500L, between.value("saving"))
+    }
+
+    @Test
     fun `sankey balances inflow and outflow`() {
         val day = d("2026-11-10")
         fun tx(kind: TxKind, cents: Long, type: Long? = null, cat: Long? = null) =

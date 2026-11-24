@@ -76,8 +76,9 @@ fun SankeyChart(
 
     BoxWithConstraints(modifier) {
         val nodeW = 12.dp
-        val labelW = 112.dp
-        val minGap = 128.dp
+        val labelW = 96.dp
+        // Three columns fit the screen; with categories (four) the chart scrolls.
+        val minGap = if (columns <= 3) 84.dp else 128.dp
         val fitGap = if (columns > 1) (maxWidth - nodeW - labelW) / (columns - 1) else 0.dp
         val colGap = if (scrollable) maxOf(minGap, fitGap) else fitGap
         val width = colGap * (columns - 1) + nodeW + labelW
@@ -145,13 +146,14 @@ fun SankeyChart(
             }
 
             // Labels with a pill background so they stay readable over the bands.
-            val maxLabel = (if (columns > 1) cg - nw - 8.dp.toPx() else labelW.toPx()).coerceAtMost(labelW.toPx() + 40.dp.toPx())
             data.nodes.forEach { n ->
+                // The last column has the reserved label width, the others the gap to the next column.
+                val maxLabel = if (n.column == columns - 1) labelW.toPx() - 8.dp.toPx() else cg - nw - 8.dp.toPx()
                 val nameLayout = measurer.measure(
                     n.label,
                     TextStyle(color = onSurface, fontSize = 11.sp, fontWeight = FontWeight.Medium),
                     overflow = TextOverflow.Ellipsis,
-                    maxLines = 1,
+                    maxLines = 2,
                     constraints = Constraints(maxWidth = maxLabel.toInt().coerceAtLeast(1)),
                 )
                 val amountLayout = measurer.measure(

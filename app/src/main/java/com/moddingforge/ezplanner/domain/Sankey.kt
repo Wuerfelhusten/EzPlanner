@@ -27,7 +27,7 @@ data class SankeyData(val nodes: List<SankeyNode>, val links: List<SankeyLink>) 
 
 /**
  * Money flow of a period:
- *   income sources -> "Einnahmen" -> expense types, saving, rest  (-> categories, optional).
+ *   income sources -> "Gesamt" -> expense types, saving, rest  (-> categories, optional).
  * If more goes out than comes in, the gap is shown as source "Aus dem Konto" (deficit).
  */
 object SankeyBuilder {
@@ -42,8 +42,17 @@ object SankeyBuilder {
         val links = mutableListOf<SankeyLink>()
         val total = "total"
 
-        val inflow = s.incomeRegular + s.incomeOther + s.fromPots
-        val outflow = s.expensesTotal + s.toPots
+        // Net per pot: money that only passes through a pot (in and out again in this period) is
+        // the same money, so it must not be counted a second time on either side.
+        val potNets = list
+            .filter { it.kind == TxKind.TO_POT || it.kind == TxKind.FROM_POT }
+            .groupBy { it.potId }
+            .values.map { txs -> txs.sumOf { if (it.kind == TxKind.TO_POT) it.amountCents else -it.amountCents } }
+        val toPots = potNets.filter { it > 0 }.sum()
+        val fromPots = -potNets.filter { it < 0 }.sum()
+
+        val inflow = s.incomeRegular + s.incomeOther + fromPots
+        val outflow = s.expensesTotal + toPots
         fun source(key: String, label: String, role: SankeyRole, value: Long) {
             if (value <= 0) return
             nodes += SankeyNode(key, label, 0, role)
@@ -51,19 +60,20 @@ object SankeyBuilder {
         }
         source("in:regular", "Einkommen", SankeyRole.INCOME, s.incomeRegular)
         source("in:other", "Sonstiges Einkommen", SankeyRole.OTHER_INCOME, s.incomeOther)
-        source("in:pots", "Aus Töpfen", SankeyRole.FROM_POTS, s.fromPots)
+        source("in:pots", "Aus Töpfen", SankeyRole.FROM_POTS, fromPots)
         source("in:deficit", "Aus dem Konto", SankeyRole.DEFICIT, outflow - inflow)
         if (links.isEmpty()) return SankeyData(emptyList(), emptyList())
-        nodes += SankeyNode(total, "Einnahmen", 1, SankeyRole.TOTAL)
+        // "Gesamt", not "Einnahmen": it also contains money from pots and from the account.
+        nodes += SankeyNode(total, "Gesamt", 1, SankeyRole.TOTAL)
 
         s.expensesByType.filter { it.cents > 0 }.sortedByDescending { it.cents }.forEach { t ->
             val key = "type:${t.type?.id ?: 0}"
             nodes += SankeyNode(key, t.type?.name ?: "Ohne Typ", 2, SankeyRole.EXPENSE_TYPE)
             links += SankeyLink(total, key, t.cents)
         }
-        if (s.toPots > 0) {
+        if (toPots > 0) {
             nodes += SankeyNode("saving", "Sparen & Töpfe", 2, SankeyRole.SAVING)
-            links += SankeyLink(total, "saving", s.toPots)
+            links += SankeyLink(total, "saving", toPots)
         }
         if (inflow > outflow) {
             nodes += SankeyNode("rest", "Übrig", 2, SankeyRole.REST)
