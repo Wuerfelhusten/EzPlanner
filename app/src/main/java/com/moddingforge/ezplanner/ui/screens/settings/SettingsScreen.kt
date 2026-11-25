@@ -37,7 +37,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Switch
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -195,19 +195,32 @@ fun SettingsScreen(nav: NavController) {
                         Column(Modifier.weight(1f)) {
                             Text(t.name, style = MaterialTheme.typography.bodyLarge)
                             Text(
-                                if (t.countsTowardBudget) "zählt zum Budget" else "zählt nicht zum Budget",
+                                when {
+                                    t.countsAsSaving -> "zählt als Sparen"
+                                    t.countsTowardBudget -> "zählt zum Budget"
+                                    else -> "zählt nicht zum Budget"
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        Switch(
-                            checked = t.countsTowardBudget,
-                            onCheckedChange = { checked -> scope.launch { repo.saveExpenseType(t.copy(countsTowardBudget = checked)) } },
-                        )
                         IconButton(onClick = { editType = t }) { Icon(Icons.Default.Edit, "Umbenennen") }
                         if (!t.builtin) {
                             IconButton(onClick = { deleteType = t }) { Icon(Icons.Default.Delete, "Löschen") }
                         }
+                    }
+                    // A type is either budget, saving, or a plain expense.
+                    Row(Modifier.padding(bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = t.countsTowardBudget,
+                            onClick = { scope.launch { repo.saveExpenseType(t.copy(countsTowardBudget = !t.countsTowardBudget, countsAsSaving = false)) } },
+                            label = { Text("Budget") },
+                        )
+                        FilterChip(
+                            selected = t.countsAsSaving,
+                            onClick = { scope.launch { repo.saveExpenseType(t.copy(countsAsSaving = !t.countsAsSaving, countsTowardBudget = false)) } },
+                            label = { Text("Sparen") },
+                        )
                     }
                 }
             }

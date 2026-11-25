@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ExpenseTypeEntity::class,
         CategoryEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -31,7 +31,7 @@ abstract class EzDatabase : RoomDatabase() {
         fun create(context: Context): EzDatabase =
             Room.databaseBuilder(context, EzDatabase::class.java, "ezplanner.db")
                 .addCallback(SeedCallback)
-                .addMigrations(Migration1To2)
+                .addMigrations(Migration1To2, Migration2To3)
                 .build()
     }
 }
@@ -48,13 +48,22 @@ private object Migration1To2 : Migration(1, 2) {
     }
 }
 
+/** 2.5.0: types can count as saving; "Investieren" does. */
+private object Migration2To3 : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE expense_types ADD COLUMN countsAsSaving INTEGER NOT NULL DEFAULT 0")
+        // Built-in but none of the three original types = "Investieren", even if it was renamed.
+        db.execSQL("UPDATE expense_types SET countsAsSaving = 1, countsTowardBudget = 0 WHERE builtin = 1 AND id NOT IN (1, 2, 3)")
+    }
+}
+
 /** Default data for a fresh install. Ids of the built-in expense types are fixed (see [DefaultData]). */
 private object SeedCallback : RoomDatabase.Callback() {
     override fun onCreate(db: SupportSQLiteDatabase) {
         DefaultData.expenseTypes.forEach {
             db.execSQL(
-                "INSERT INTO expense_types (id, name, countsTowardBudget, sortOrder, builtin) VALUES (?, ?, ?, ?, ?)",
-                arrayOf<Any>(it.id, it.name, if (it.countsTowardBudget) 1 else 0, it.sortOrder, if (it.builtin) 1 else 0),
+                "INSERT INTO expense_types (id, name, countsTowardBudget, sortOrder, builtin, countsAsSaving) VALUES (?, ?, ?, ?, ?, ?)",
+                arrayOf<Any>(it.id, it.name, if (it.countsTowardBudget) 1 else 0, it.sortOrder, if (it.builtin) 1 else 0, if (it.countsAsSaving) 1 else 0),
             )
         }
         DefaultData.categories.forEach {
@@ -77,7 +86,7 @@ object DefaultData {
         ExpenseTypeEntity(TYPE_FIXED, "Fixkosten", countsTowardBudget = false, sortOrder = 0, builtin = true),
         ExpenseTypeEntity(TYPE_BUDGET, "Budget", countsTowardBudget = true, sortOrder = 1, builtin = true),
         ExpenseTypeEntity(TYPE_SPECIAL, "Sonderausgaben", countsTowardBudget = false, sortOrder = 2, builtin = true),
-        ExpenseTypeEntity(TYPE_INVEST, "Investieren", countsTowardBudget = false, sortOrder = 3, builtin = true),
+        ExpenseTypeEntity(TYPE_INVEST, "Investieren", countsTowardBudget = false, sortOrder = 3, builtin = true, countsAsSaving = true),
     )
 
     val categories = listOf(

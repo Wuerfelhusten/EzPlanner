@@ -69,7 +69,7 @@ private enum class Filter(val label: String, val matches: (TransactionEntity) ->
     ALL("Alle", { true }),
     INCOME("Einkommen", { it.kind == TxKind.INCOME }),
     EXPENSE("Ausgaben", { it.kind == TxKind.EXPENSE }),
-    POTS("Sparen & Töpfe", { it.kind == TxKind.TO_POT || it.kind == TxKind.FROM_POT || it.kind == TxKind.POT_ADJUSTMENT }),
+    POTS("Sparen & Investieren", { it.kind == TxKind.TO_POT || it.kind == TxKind.FROM_POT || it.kind == TxKind.POT_ADJUSTMENT }),
     ADJUST("Anpassungen", { it.kind == TxKind.ADJUSTMENT }),
 }
 
@@ -88,9 +88,14 @@ fun HistoryScreen(nav: NavController) {
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    val savingTypeIds = types.filter { it.countsAsSaving }.map { it.id }.toSet()
     val inMonth = transactions.filter { YearMonth.from(it.date) == month }
     val visible = inMonth
-        .filter(filter.matches)
+        .filter { tx ->
+            // Types that count as saving (Investieren) belong to the saving filter.
+            val saving = tx.kind == TxKind.EXPENSE && tx.expenseTypeId in savingTypeIds
+            if (saving) filter == Filter.ALL || filter == Filter.POTS else filter.matches(tx)
+        }
         .filter { tx ->
             when {
                 filter != Filter.EXPENSE || sub == 0L -> true
@@ -133,7 +138,7 @@ fun HistoryScreen(nav: NavController) {
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    items(types, key = { "t${it.id}" }) { t ->
+                    items(types.filter { !it.countsAsSaving }, key = { "t${it.id}" }) { t ->
                         FilterChip(selected = sub == t.id, onClick = { sub = if (sub == t.id) 0 else t.id }, label = { Text(t.name) })
                     }
                     items(categories, key = { "c${it.id}" }) { c ->
@@ -228,7 +233,7 @@ private fun HistoryItem(
         TxKind.POT_ADJUSTMENT -> Money.formatSigned(tx.amountCents) to Ez.money.transfer
         TxKind.ADJUSTMENT -> Money.formatSigned(delta) to Ez.money.adjustment
         TxKind.TO_POT, TxKind.FROM_POT -> Money.formatSigned(delta) to Ez.money.transfer
-        else -> Money.formatSigned(delta) to if (delta >= 0) Ez.money.income else Ez.money.expense
+        else -> Money.formatSigned(delta) to if (tx.kind == TxKind.EXPENSE && types.any { it.id == tx.expenseTypeId && it.countsAsSaving }) Ez.money.transfer else if (delta >= 0) Ez.money.income else Ez.money.expense
     }
 
     Card(

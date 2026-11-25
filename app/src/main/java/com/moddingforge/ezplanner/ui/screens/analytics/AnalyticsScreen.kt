@@ -156,8 +156,9 @@ fun AnalyticsScreen() {
                 }
             }
 
-            SectionCard(title = "Sparen & Töpfe") {
+            SectionCard(title = "Sparen & Investieren") {
                 AmountRow("Gespart (netto)", summary.savedNet, emphasized = true, signed = true, color = money.transfer)
+                summary.investedByType.forEach { t -> AmountRow(t.type?.name.orEmpty(), t.cents, indent = true) }
                 AmountRow("In Töpfe", summary.toPots, indent = true)
                 AmountRow("Aus Töpfen", summary.fromPots, indent = true)
                 Text(
@@ -253,7 +254,7 @@ fun AnalyticsScreen() {
             SectionCard(title = "Letzte 6 Monate") {
                 IncomeExpenseBars(history, money.income, money.expense)
                 Text(
-                    "Ohne Sparen/Töpfe und Kontostand-Anpassungen.",
+                    "Ohne Sparen, Investieren und Kontostand-Anpassungen.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 6.dp),

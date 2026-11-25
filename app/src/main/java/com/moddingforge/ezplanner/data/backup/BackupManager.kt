@@ -4,6 +4,7 @@ import com.moddingforge.ezplanner.data.Settings
 import com.moddingforge.ezplanner.data.Snapshot
 import com.moddingforge.ezplanner.data.db.CategoryEntity
 import com.moddingforge.ezplanner.data.db.DebtDirection
+import com.moddingforge.ezplanner.data.db.DefaultData
 import com.moddingforge.ezplanner.data.db.ExpenseTypeEntity
 import com.moddingforge.ezplanner.data.db.IncomeType
 import com.moddingforge.ezplanner.data.db.Interval
@@ -41,7 +42,11 @@ data class BackupFile(
 
 @Serializable data class BSettings(val monthlyBudgetCents: Long, val warnPercent: Int)
 
-@Serializable data class BExpenseType(val id: Long, val name: String, val countsTowardBudget: Boolean, val sortOrder: Int, val builtin: Boolean)
+@Serializable data class BExpenseType(
+    val id: Long, val name: String, val countsTowardBudget: Boolean, val sortOrder: Int, val builtin: Boolean,
+    /** Missing in backups before 2.5.0. */
+    val countsAsSaving: Boolean? = null,
+)
 
 @Serializable data class BCategory(val id: Long, val name: String, val color: Long, val sortOrder: Int)
 
@@ -75,7 +80,7 @@ object BackupManager {
         BackupFile(
             createdAt = now.toString(),
             settings = BSettings(s.settings.monthlyBudgetCents, s.settings.warnPercent),
-            expenseTypes = s.expenseTypes.map { BExpenseType(it.id, it.name, it.countsTowardBudget, it.sortOrder, it.builtin) },
+            expenseTypes = s.expenseTypes.map { BExpenseType(it.id, it.name, it.countsTowardBudget, it.sortOrder, it.builtin, it.countsAsSaving) },
             categories = s.categories.map { BCategory(it.id, it.name, it.color, it.sortOrder) },
             pots = s.pots.map {
                 BPot(it.id, it.name, it.kind.name, it.person, it.direction?.name, it.targetCents, it.note, it.archived)
@@ -107,7 +112,11 @@ object BackupManager {
         require(file.version <= 1) { "Das Backup stammt aus einer neueren App-Version." }
         return try {
             Snapshot(
-                expenseTypes = file.expenseTypes.map { ExpenseTypeEntity(it.id, it.name, it.countsTowardBudget, it.sortOrder, it.builtin) },
+                expenseTypes = file.expenseTypes.map {
+                    // Older backups: the built-in type beyond the three original ones is "Investieren".
+                    val saving = it.countsAsSaving ?: (it.builtin && it.id > DefaultData.TYPE_SPECIAL)
+                    ExpenseTypeEntity(it.id, it.name, it.countsTowardBudget && !saving, it.sortOrder, it.builtin, saving)
+                },
                 categories = file.categories.map { CategoryEntity(it.id, it.name, it.color, it.sortOrder) },
                 pots = file.pots.map {
                     PotEntity(

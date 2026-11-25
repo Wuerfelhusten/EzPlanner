@@ -1,5 +1,6 @@
 package com.moddingforge.ezplanner.data.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -54,6 +55,8 @@ data class ExpenseTypeEntity(
     val sortOrder: Int = 0,
     /** Built-in types can be renamed but not deleted. */
     val builtin: Boolean = false,
+    /** Money of this type is saved/invested (e.g. ETF): counts as saving, not as expense. */
+    @ColumnInfo(defaultValue = "0") val countsAsSaving: Boolean = false,
 )
 
 @Entity(tableName = "categories")

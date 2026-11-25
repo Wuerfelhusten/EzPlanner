@@ -84,7 +84,7 @@ fun OrdersScreen(nav: NavController) {
     val sections = buildList {
         add(Section("income", "Einkommen", running.filter { it.kind == TxKind.INCOME }))
         // Every expense type gets its own block: Fixkosten, Budget, Sonderausgaben, Investieren, own types.
-        types.forEach { t -> add(Section("type-${t.id}", t.name, expenses.filter { it.expenseTypeId == t.id })) }
+        types.sortedBy { it.countsAsSaving }.forEach { t -> add(Section("type-${t.id}", t.name, expenses.filter { it.expenseTypeId == t.id })) }
         add(Section("type-none", "Ausgaben ohne Typ", expenses.filter { it.expenseTypeId !in typeIds }))
         add(Section("saving", "Sparen & Töpfe", running.filter { it.kind == TxKind.TO_POT || it.kind == TxKind.FROM_POT }))
         add(Section("stopped", "Pausiert / beendet", stopped, showPerMonth = false))
@@ -96,8 +96,11 @@ fun OrdersScreen(nav: NavController) {
         .sortedBy { it.date }
 
     val income = running.filter { it.kind == TxKind.INCOME }.perMonth()
-    val saving = running.filter { it.kind == TxKind.TO_POT }.perMonth() - running.filter { it.kind == TxKind.FROM_POT }.perMonth()
-    val expenseTotal = expenses.perMonth()
+    val savingTypes = types.filter { it.countsAsSaving }
+    val savingTypeIds = savingTypes.map { it.id }.toSet()
+    val intoPots = running.filter { it.kind == TxKind.TO_POT }.perMonth() - running.filter { it.kind == TxKind.FROM_POT }.perMonth()
+    val saving = intoPots + expenses.filter { it.expenseTypeId in savingTypeIds }.perMonth()
+    val expenseTotal = expenses.filter { it.expenseTypeId !in savingTypeIds }.perMonth()
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
@@ -123,11 +126,15 @@ fun OrdersScreen(nav: NavController) {
                     SectionCard(title = "Daueraufträge pro Monat umgerechnet") {
                         AmountRow("Einkommen", income, color = Ez.money.income)
                         AmountRow("Ausgaben", -expenseTotal, signed = true, color = Ez.money.expense)
-                        types.forEach { t ->
+                        types.filter { !it.countsAsSaving }.forEach { t ->
                             val v = expenses.filter { it.expenseTypeId == t.id }.perMonth()
                             if (v > 0) AmountRow("Davon ${t.name}", -v, signed = true, indent = true)
                         }
                         AmountRow("Sparen", -saving, signed = true, color = Ez.money.transfer)
+                        savingTypes.forEach { t ->
+                            val v = expenses.filter { it.expenseTypeId == t.id }.perMonth()
+                            if (v > 0) AmountRow("Davon ${t.name}", -v, signed = true, indent = true)
+                        }
                         AmountRow("Bleibt", income - expenseTotal - saving, emphasized = true, signed = true)
                     }
                 }
@@ -178,6 +185,7 @@ fun OrdersScreen(nav: NavController) {
                     items(inInterval, key = { it.id }) { order ->
                         OrderItem(
                             order,
+                            isSaving = order.kind == TxKind.EXPENSE && order.expenseTypeId in savingTypeIds,
                             subtitleExtra = when (order.kind) {
                                 TxKind.EXPENSE -> categories.firstOrNull { it.id == order.categoryId }?.name
                                 TxKind.TO_POT, TxKind.FROM_POT -> pots.firstOrNull { it.id == order.potId }?.name
@@ -214,6 +222,7 @@ fun OrdersScreen(nav: NavController) {
             items(plannedOnce, key = { "p${it.id}" }) { tx ->
                 PlannedItem(
                     tx,
+                    isSaving = tx.kind == TxKind.EXPENSE && tx.expenseTypeId in savingTypeIds,
                     subtitle = listOfNotNull(
                         types.firstOrNull { it.id == tx.expenseTypeId }?.name,
                         categories.firstOrNull { it.id == tx.categoryId }?.name,
@@ -234,12 +243,12 @@ fun OrdersScreen(nav: NavController) {
 }
 
 @Composable
-private fun OrderItem(order: StandingOrderEntity, subtitleExtra: String?, onClick: () -> Unit) {
+private fun OrderItem(order: StandingOrderEntity, isSaving: Boolean, subtitleExtra: String?, onClick: () -> Unit) {
     val positive = order.kind == TxKind.INCOME || order.kind == TxKind.FROM_POT
     val next = Schedule.nextDueDate(order)
     val color: Color = when {
         next == null -> MaterialTheme.colorScheme.onSurfaceVariant
-        order.kind == TxKind.TO_POT || order.kind == TxKind.FROM_POT -> Ez.money.transfer
+        isSaving || order.kind == TxKind.TO_POT || order.kind == TxKind.FROM_POT -> Ez.money.transfer
         positive -> Ez.money.income
         else -> Ez.money.expense
     }
@@ -277,9 +286,9 @@ private fun OrderItem(order: StandingOrderEntity, subtitleExtra: String?, onClic
 }
 
 @Composable
-private fun PlannedItem(tx: TransactionEntity, subtitle: String, onClick: () -> Unit) {
+private fun PlannedItem(tx: TransactionEntity, isSaving: Boolean, subtitle: String, onClick: () -> Unit) {
     val delta = Ledger.accountDelta(tx)
-    val color = when (tx.kind) {
+    val color = if (isSaving) Ez.money.transfer else when (tx.kind) {
         TxKind.TO_POT, TxKind.FROM_POT, TxKind.POT_ADJUSTMENT -> Ez.money.transfer
         TxKind.ADJUSTMENT -> Ez.money.adjustment
         else -> if (delta >= 0) Ez.money.income else Ez.money.expense

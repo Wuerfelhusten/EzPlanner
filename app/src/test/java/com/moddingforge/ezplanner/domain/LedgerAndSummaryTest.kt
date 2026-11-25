@@ -96,6 +96,28 @@ class LedgerAndSummaryTest {
     }
 
     @Test
+    fun `investing counts as saving`() {
+        val all = listOf(
+            tx(TxKind.INCOME, 200000, income = IncomeType.REGULAR),
+            tx(TxKind.EXPENSE, 50000, DefaultData.TYPE_INVEST),
+            tx(TxKind.EXPENSE, 30000, DefaultData.TYPE_FIXED),
+            tx(TxKind.TO_POT, 10000, pot = 1),
+        )
+        val s = MonthSummaryCalculator.summarize(all, DefaultData.expenseTypes, DefaultData.categories)
+        assertEquals(30000L, s.expensesTotal)
+        assertEquals(50000L, s.invested)
+        assertEquals(60000L, s.savedNet)
+        assertEquals(110000L, s.net)
+        assertEquals(30000L, s.expensesByCategory.sumOf { it.cents })
+        assertTrue(s.expensesByType.none { it.type?.id == DefaultData.TYPE_INVEST })
+        // The money still leaves the account.
+        assertEquals(110000L, Ledger.accountBalance(all, day))
+        val flow = SankeyBuilder.build(all, DefaultData.expenseTypes, DefaultData.categories, true)
+        assertEquals(50000L, flow.value("type:${DefaultData.TYPE_INVEST}"))
+        assertEquals(110000L, flow.value("rest"))
+    }
+
+    @Test
     fun `setting a pot balance changes only the pot`() {
         for (pot in listOf(savings, lent, borrowed)) {
             val all = listOf(tx(TxKind.INCOME, 100000), tx(TxKind.POT_ADJUSTMENT, 425000, pot = pot.id))

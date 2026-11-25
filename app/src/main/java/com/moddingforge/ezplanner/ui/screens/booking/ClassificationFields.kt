@@ -117,7 +117,11 @@ fun ClassificationFields(
                 )
                 types.firstOrNull { it.id == value.expenseTypeId }?.let { t ->
                     Text(
-                        if (t.countsTowardBudget) "Wird vom Monatsbudget abgezogen." else "Zählt nicht zum Monatsbudget.",
+                        when {
+                            t.countsAsSaving -> "Zählt als Sparen, nicht als Ausgabe."
+                            t.countsTowardBudget -> "Wird vom Monatsbudget abgezogen."
+                            else -> "Zählt nicht zum Monatsbudget."
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

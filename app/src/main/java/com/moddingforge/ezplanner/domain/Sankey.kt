@@ -5,7 +5,7 @@ import com.moddingforge.ezplanner.data.db.ExpenseTypeEntity
 import com.moddingforge.ezplanner.data.db.TransactionEntity
 import com.moddingforge.ezplanner.data.db.TxKind
 
-enum class SankeyRole { INCOME, OTHER_INCOME, FROM_POTS, DEFICIT, TOTAL, EXPENSE_TYPE, SAVING, REST, CATEGORY }
+enum class SankeyRole { INCOME, OTHER_INCOME, FROM_POTS, DEFICIT, TOTAL, EXPENSE_TYPE, INVESTING, SAVING, REST, CATEGORY }
 
 data class SankeyNode(
     val key: String,
@@ -52,7 +52,7 @@ object SankeyBuilder {
         val fromPots = -potNets.filter { it < 0 }.sum()
 
         val inflow = s.incomeRegular + s.incomeOther + fromPots
-        val outflow = s.expensesTotal + toPots
+        val outflow = s.expensesTotal + s.invested + toPots
         fun source(key: String, label: String, role: SankeyRole, value: Long) {
             if (value <= 0) return
             nodes += SankeyNode(key, label, 0, role)
@@ -69,6 +69,11 @@ object SankeyBuilder {
         s.expensesByType.filter { it.cents > 0 }.sortedByDescending { it.cents }.forEach { t ->
             val key = "type:${t.type?.id ?: 0}"
             nodes += SankeyNode(key, t.type?.name ?: "Ohne Typ", 2, SankeyRole.EXPENSE_TYPE)
+            links += SankeyLink(total, key, t.cents)
+        }
+        s.investedByType.filter { it.cents > 0 }.forEach { t ->
+            val key = "type:${t.type?.id ?: 0}"
+            nodes += SankeyNode(key, t.type?.name.orEmpty(), 2, SankeyRole.INVESTING)
             links += SankeyLink(total, key, t.cents)
         }
         if (toPots > 0) {

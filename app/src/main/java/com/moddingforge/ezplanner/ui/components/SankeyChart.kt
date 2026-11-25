@@ -66,6 +66,7 @@ fun SankeyChart(
             SankeyRole.INCOME -> money.income
             SankeyRole.OTHER_INCOME -> money.income.copy(alpha = 0.7f)
             SankeyRole.FROM_POTS, SankeyRole.SAVING -> money.transfer
+            SankeyRole.INVESTING -> Color(0xFF3FB8AF)
             SankeyRole.DEFICIT -> money.expense
             SankeyRole.TOTAL -> totalColor
             SankeyRole.REST -> Color(0xFF8FA3B8)

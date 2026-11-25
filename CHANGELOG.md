@@ -3,6 +3,11 @@
 Every release needs a section `## <version>` here (the release workflow fails without one).
 The section becomes the GitHub release text and is shown in the app after the update.
 
+## 2.5.0
+
+- „Investieren“ zählt jetzt als Sparen und nicht mehr als Ausgabe – in Auswertungen, Geldfluss, Aufträgen und Verlauf, auch für bereits erfasste Buchungen
+- Einstellungen: Für jeden Ausgabentyp lässt sich festlegen, ob er zum Budget oder als Sparen zählt
+
 ## 2.4.1
 
 - Geldfluss: Ein- und Auszahlungen desselben Topfs werden im gewählten Zeitraum verrechnet – Geld, das nur durch einen Topf läuft, zählt nicht mehr mehrfach

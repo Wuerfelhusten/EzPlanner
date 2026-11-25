@@ -13,13 +13,15 @@ data class TypeAmount(val type: ExpenseTypeEntity?, val cents: Long)
 data class CategoryAmount(val category: CategoryEntity?, val cents: Long)
 
 /**
- * Totals of a period. Saving (money moved into or out of pots) is its own area: it is neither
+ * Totals of a period. Saving (money moved into or out of pots, or invested) is its own area: it is neither
  * income nor expense, so it shows up separately and does not inflate either side.
  */
 data class MonthSummary(
     val incomeRegular: Long,
     val incomeOther: Long,
     val expensesByType: List<TypeAmount>,
+    /** Expense types that count as saving (e.g. Investieren). */
+    val investedByType: List<TypeAmount>,
     val expensesByCategory: List<CategoryAmount>,
     /** Expenses of types that count toward the monthly budget. */
     val budgetUsed: Long,
@@ -30,7 +32,8 @@ data class MonthSummary(
 ) {
     val incomeTotal: Long get() = incomeRegular + incomeOther
     val expensesTotal: Long get() = expensesByType.sumOf { it.cents }
-    val savedNet: Long get() = toPots - fromPots
+    val invested: Long get() = investedByType.sumOf { it.cents }
+    val savedNet: Long get() = toPots - fromPots + invested
     /** What is left after expenses and saving. */
     val net: Long get() = incomeTotal - expensesTotal - savedNet
 }
@@ -60,11 +63,12 @@ object MonthSummaryCalculator {
     ): MonthSummary {
         val typeById = types.associateBy { it.id }
         val categoryById = categories.associateBy { it.id }
-        val expenses = list.filter { it.kind == TxKind.EXPENSE }
+        val (invested, expenses) = list.filter { it.kind == TxKind.EXPENSE }
+            .partition { tx -> tx.expenseTypeId?.let(typeById::get)?.countsAsSaving == true }
 
         // Every type is listed (also with 0), in the user's order; unknown/deleted types last.
         val byType = expenses.groupBy { it.expenseTypeId?.takeIf(typeById::containsKey) }
-        val typeAmounts = types.map { t -> TypeAmount(t, byType[t.id].orEmpty().sumOf { it.amountCents }) } +
+        val typeAmounts = types.filter { !it.countsAsSaving }.map { t -> TypeAmount(t, byType[t.id].orEmpty().sumOf { it.amountCents }) } +
             listOfNotNull(byType[null]?.let { l -> TypeAmount(null, l.sumOf { it.amountCents }) })
 
         val categoryAmounts = expenses
@@ -76,6 +80,8 @@ object MonthSummaryCalculator {
             incomeRegular = list.filter { it.kind == TxKind.INCOME && it.incomeType != IncomeType.OTHER }.sumOf { it.amountCents },
             incomeOther = list.filter { it.kind == TxKind.INCOME && it.incomeType == IncomeType.OTHER }.sumOf { it.amountCents },
             expensesByType = typeAmounts,
+            investedByType = types.filter { it.countsAsSaving }
+                .map { t -> TypeAmount(t, invested.filter { it.expenseTypeId == t.id }.sumOf { it.amountCents }) },
             expensesByCategory = categoryAmounts,
             budgetUsed = expenses
                 .filter { e -> e.expenseTypeId?.let(typeById::get)?.countsTowardBudget == true }
